@@ -27,6 +27,9 @@ class _AddNotificationScreenState extends State<AddNotificationScreen> {
   String _sound = 'Default';
   String _vibrate = 'Default';
 
+  double? _latitude;
+  double? _longitude;
+
   // Same permission-check pattern as Practical 13 / MapScreen
   Future<void> _useCurrentLocation() async {
     bool granted = await handler.Permission.locationWhenInUse.isGranted;
@@ -37,13 +40,12 @@ class _AddNotificationScreenState extends State<AddNotificationScreen> {
     if (!granted) return;
 
     final locationData = await _location.getLocation();
-    // TODO: reverse-geocode locationData.latitude/longitude into a street
-    // address with the `geocoding` package if you want a friendlier label.
     setState(() {
       _locationLabel = 'Current Location';
       _nameController.text = 'Current Location';
+      _latitude = locationData.latitude;   // NEW
+      _longitude = locationData.longitude; // NEW
     });
-    debugPrint('lat: ${locationData.latitude}, lng: ${locationData.longitude}');
   }
 
   Future<void> _pickRoute() async {
@@ -90,16 +92,18 @@ class _AddNotificationScreenState extends State<AddNotificationScreen> {
       '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
 
   void _saveNotification() async {
-    if (_nameController.text.trim().isEmpty || _selectedRoute == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please fill in a name and select a route.')));
+    if (_nameController.text.trim().isEmpty || _selectedRoute == null || _latitude == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Please fill in a name, select a route, and set a location.')));
       return;
     }
 
     final alert = NotificationAlertModel(
       id: 0,
       name: _nameController.text.trim(),
-      location: _locationLabel.isEmpty ? 'Not set' : _locationLabel,
+      location: _locationLabel,
+      latitude: _latitude!,
+      longitude: _longitude!,
       type: widget.type,
       routeRef: _selectedRoute!,
       startTime: _formatTime(_startTime),

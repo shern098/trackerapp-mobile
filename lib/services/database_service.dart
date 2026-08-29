@@ -22,8 +22,12 @@ class DatabaseService {
   Future<Database> initDatabase() async {
     final getDirectory = await getApplicationDocumentsDirectory();
     String path = '${getDirectory.path}/transport_tracker.db';
-    log(path);
-    return await openDatabase(path, onCreate: _onCreate, version: 1);
+    return await openDatabase(
+      path,
+      onCreate: _onCreate,
+      onUpgrade: _onUpgrade,
+      version: 2,
+    );
   }
 
   // Create tables
@@ -54,6 +58,13 @@ class DatabaseService {
         'vibrate TEXT)');
 
     log('TABLES CREATED');
+  }
+
+  void _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      await db.execute('ALTER TABLE NotificationAlerts ADD COLUMN latitude REAL DEFAULT 0');
+      await db.execute('ALTER TABLE NotificationAlerts ADD COLUMN longitude REAL DEFAULT 0');
+    }
   }
 
   // ---------- Bus CRUD ----------
@@ -122,13 +133,15 @@ class DatabaseService {
 
   Future<void> insertNotification(NotificationAlertModel alert) async {
     final db = await _databaseService.database;
-    var data = await db.rawInsert(
+    await db.rawInsert(
         'INSERT INTO NotificationAlerts'
-        '(name, location, type, routeRef, startTime, endTime, sound, vibrate) '
-        'VALUES(?,?,?,?,?,?,?,?)',
+            '(name, location, latitude, longitude, type, routeRef, startTime, endTime, sound, vibrate) '
+            'VALUES(?,?,?,?,?,?,?,?,?,?)',
         [
           alert.name,
           alert.location,
+          alert.latitude,
+          alert.longitude,
           alert.type,
           alert.routeRef,
           alert.startTime,
@@ -136,7 +149,6 @@ class DatabaseService {
           alert.sound,
           alert.vibrate,
         ]);
-    log('inserted notification $data');
   }
 
   Future<void> deleteNotification(int id) async {

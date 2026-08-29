@@ -7,19 +7,33 @@ import 'screens/add_train_screen.dart';
 import 'screens/notification_settings_screen.dart';
 import 'screens/account_screen.dart';
 import 'screens/settings_screen.dart';
+import 'services/notification_service.dart';
+import 'dart:io';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
-void main() {
-  runApp(const TransportTrackerApp());
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // sqflite has no native Windows/Linux implementation — this FFI backend
+  // is required on desktop. Android/iOS don't need this at all.
+  if (Platform.isWindows || Platform.isLinux) {
+    sqfliteFfiInit();
+    databaseFactory = databaseFactoryFfi;
+  }
+
+  await NotificationService().init();
+  runApp(const MyApp());
 }
 
-class TransportTrackerApp extends StatelessWidget {
-  const TransportTrackerApp({super.key});
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Transport Tracker',
-      theme: ThemeData(useMaterial3: true, colorSchemeSeed: Colors.blue),
+      theme: ThemeData(useMaterial3: true, colorSchemeSeed: Colors.lightBlueAccent),
       initialRoute: '/',
       routes: {
         '/': (context) => const MapScreen(),
