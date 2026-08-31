@@ -1,13 +1,19 @@
+/// Represents one row from the "NotificationAlerts" SQLite table — a
+/// saved geofence alert like "notify me when bus 300 is near my current
+/// location, between 9am and 11am". latitude/longitude are the actual
+/// GPS coordinates captured via the "Current Location" button in
+/// add_notification_screen.dart — these are what map_screen.dart's
+/// geofence check compares the live device position against.
 class NotificationAlertModel {
   final int id;
-  final String name;
-  final String location;
-  final double latitude;
-  final double longitude;
-  final String type; // 'bus' or 'train'
-  final String routeRef; // e.g. '300' or 'Kelana Jaya'
-  final String startTime; // '09:00'
-  final String endTime; // '11:00'
+  final String name; // user-facing label, e.g. "Current Location"
+  final String location; // display text for the location (not used for math — see lat/lng below)
+  final double latitude; // actual GPS latitude used for the geofence distance check
+  final double longitude; // actual GPS longitude used for the geofence distance check
+  final String type; // 'bus' or 'train' — which Notification Setting screen this belongs to
+  final String routeRef; // the saved bus number / train line this alert is for, e.g. '300'
+  final String startTime; // active window start, formatted 'HH:MM'
+  final String endTime; // active window end, formatted 'HH:MM'
   final String sound;
   final String vibrate;
 
@@ -25,6 +31,9 @@ class NotificationAlertModel {
     required this.vibrate,
   });
 
+  // Builds a NotificationAlertModel from a raw database row. The
+  // latitude/longitude type check handles SQLite sometimes returning
+  // whole-number coordinates as int instead of double.
   factory NotificationAlertModel.fromJson(Map<String, dynamic> data) =>
       NotificationAlertModel(
         id: data['id'],
@@ -44,17 +53,18 @@ class NotificationAlertModel {
         vibrate: data['vibrate'],
       );
 
+  // Converts this object back into a Map for db.insert().
   Map<String, dynamic> toMap() => {
-    'id': id,
-    'name': name,
-    'location': location,
-    'latitude': latitude,
-    'longitude': longitude,
-    'type': type,
-    'routeRef': routeRef,
-    'startTime': startTime,
-    'endTime': endTime,
-    'sound': sound,
-    'vibrate': vibrate,
-  };
+        'id': id,
+        'name': name,
+        'location': location,
+        'latitude': latitude,
+        'longitude': longitude,
+        'type': type,
+        'routeRef': routeRef,
+        'startTime': startTime,
+        'endTime': endTime,
+        'sound': sound,
+        'vibrate': vibrate,
+      };
 }

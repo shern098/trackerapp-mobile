@@ -1,4 +1,3 @@
-// lib/services/notification_service.dart
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 class NotificationService {
@@ -11,21 +10,27 @@ class NotificationService {
 
   Future<void> init() async {
     if (_initialized) return;
+
     const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
     final windowsSettings = WindowsInitializationSettings(
       appName: 'Transport Tracker',
       appUserModelId: 'Com.TransportTracker.App',
-      guid: '92517ef0-7d73-4894-bcab-f356dce4a5e1', // just needs to be unique to your app
+      guid: '92517ef0-7d73-4894-bcab-f356dce4a5e1',
     );
     final initSettings = InitializationSettings(
       android: androidSettings,
-      windows: windowsSettings, // NEW
+      windows: windowsSettings,
     );
+
     await _plugin.initialize(settings: initSettings);
     _initialized = true;
   }
 
-  Future<void> showAlert({required int id, required String title, required String body}) async {
+  Future<void> showAlert({
+    required int id,
+    required String title,
+    required String body,
+  }) async {
     const androidDetails = AndroidNotificationDetails(
       'transport_alerts',
       'Transport Alerts',
@@ -34,11 +39,12 @@ class NotificationService {
       priority: Priority.high,
     );
     const details = NotificationDetails(android: androidDetails);
+
     await _plugin.show(
-      id: id,                      // CHANGED: named
-      title: title,                // CHANGED: named
-      body: body,                  // CHANGED: named
-      notificationDetails: details, // CHANGED: named, and renamed from "details"
+      id: id,
+      title: title,
+      body: body,
+      notificationDetails: details,
     );
   }
 }

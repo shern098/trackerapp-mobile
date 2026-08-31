@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
+import '../main.dart' show currentUserNotifier;
 import '../services/database_service.dart';
 import '../services/transit_api_service.dart';
 
+/// Same shape as AddBusScreen, for train lines instead of bus numbers —
+/// e.g. typing "kel" suggests "Kelana Jaya Line" before saving to the
+/// "Trains" table. Only reachable while signed in.
 class AddTrainScreen extends StatefulWidget {
   const AddTrainScreen({super.key});
 
@@ -10,16 +14,32 @@ class AddTrainScreen extends StatefulWidget {
 }
 
 class _AddTrainScreenState extends State<AddTrainScreen> {
-  final _lineController = TextEditingController();
+  // Captured from Autocomplete's fieldViewBuilder below — this is
+  // Autocomplete's own internally-managed controller, not one we create
+  // ourselves, so we must NOT dispose it (Autocomplete disposes it
+  // automatically; doing so ourselves too would crash).
+  TextEditingController? _lineController;
   final _apiService = TransitApiService();
   final _dbService = DatabaseService();
 
   RouteInfo? _routeInfo;
   bool _isLoading = false;
   String? _errorText;
+  List<String> _allTrainLines = []; // powers the Autocomplete suggestions below
+
+  @override
+  void initState() {
+    super.initState();
+    _loadTrainLineSuggestions();
+  }
+
+  void _loadTrainLineSuggestions() async {
+    final lines = await _apiService.listTrainLines();
+    if (mounted) setState(() => _allTrainLines = lines);
+  }
 
   void _lookupTrain() async {
-    final input = _lineController.text.trim();
+    final input = _lineController?.text.trim() ?? '';
     if (input.isEmpty) return;
 
     setState(() {
@@ -45,7 +65,15 @@ class _AddTrainScreenState extends State<AddTrainScreen> {
 
   void _addToTrainList() async {
     if (_routeInfo == null) return;
-    await _dbService.insertTrain(_routeInfo!.label);
+
+    final userId = currentUserNotifier.value?.id;
+    if (userId == null) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Please sign in to add a train.')));
+      return;
+    }
+
+    await _dbService.insertTrain(userId, _routeInfo!.label);
     if (mounted) Navigator.pop(context);
   }
 
@@ -58,13 +86,32 @@ class _AddTrainScreenState extends State<AddTrainScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            TextField(
-              controller: _lineController,
-              decoration: const InputDecoration(
-                hintText: 'Enter Train Line',
-                border: OutlineInputBorder(),
-              ),
-              onSubmitted: (_) => _lookupTrain(),
+            Autocomplete<String>(
+              optionsBuilder: (TextEditingValue value) {
+                if (value.text.isEmpty) return const Iterable<String>.empty();
+                // Substring match, case-insensitive — this is what makes
+                // typing "kel" suggest "Kelana Jaya Line".
+                return _allTrainLines.where(
+                    (line) => line.toLowerCase().contains(value.text.toLowerCase()));
+              },
+              onSelected: (selection) {
+                _lineController?.text = selection;
+              },
+              fieldViewBuilder: (context, controller, focusNode, onSubmitted) {
+                // Capture Autocomplete's own controller once so
+                // _lookupTrain() can read it directly — no separate mirror
+                // controller or listener needed.
+                _lineController = controller;
+                return TextField(
+                  controller: controller,
+                  focusNode: focusNode,
+                  decoration: const InputDecoration(
+                    hintText: 'Enter Train Line',
+                    border: OutlineInputBorder(),
+                  ),
+                  onSubmitted: (_) => _lookupTrain(),
+                );
+              },
             ),
             const SizedBox(height: 12),
             if (_routeInfo != null)
