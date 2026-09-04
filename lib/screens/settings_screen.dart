@@ -19,63 +19,97 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   final _themeService = ThemeService();
   final _authService = AuthService();
-  ThemeMode _selectedTheme = ThemeMode.light;
+  bool _isSaving = false;
 
-  @override
-  void initState() {
-    super.initState();
-    // Pre-select whatever theme is currently active, so the dropdown
-    // reflects reality instead of always resetting to "Light".
-    _selectedTheme = themeModeNotifier.value;
-  }
+  Future<void> _onThemeChanged(ThemeMode? mode) async {
+    if (mode == null || _isSaving) return;
 
-  void _onThemeChanged(ThemeMode? mode) async {
-    if (mode == null) return;
-    setState(() => _selectedTheme = mode);
+    final previousMode = themeModeNotifier.value;
     themeModeNotifier.value = mode; // updates the running app immediately
+    setState(() => _isSaving = true);
 
     final user = currentUserNotifier.value;
-    if (user != null) {
-      // Signed in — persist to this account specifically.
-      await _authService.updateThemeMode(user, mode == ThemeMode.dark ? 'dark' : 'light');
-    } else {
-      // Not signed in — fall back to a single app-wide guest preference.
-      await _themeService.saveThemeMode(mode);
+    try {
+      if (user != null) {
+        // Signed in — persist to this account specifically.
+        await _authService.updateThemeMode(
+            user, mode == ThemeMode.dark ? 'dark' : 'light');
+      } else {
+        // Not signed in — fall back to a single app-wide guest preference.
+        await _themeService.saveThemeMode(mode);
+      }
+    } catch (e) {
+      // Saving failed — revert the visible theme so the UI doesn't claim
+      // a preference that wasn't actually persisted, and let the user know.
+      themeModeNotifier.value = previousMode;
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not save theme: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final isGuest = currentUserNotifier.value == null;
+    return ValueListenableBuilder<ThemeMode>(
+      valueListenable: themeModeNotifier,
+      builder: (context, currentTheme, _) {
+        return ValueListenableBuilder(
+          valueListenable: currentUserNotifier,
+          builder: (context, user, _) {
+            final isGuest = user == null;
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('Settings')),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('Theme', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-            const SizedBox(height: 8),
-            DropdownButton<ThemeMode>(
-              value: _selectedTheme,
-              isExpanded: true,
-              items: const [
-                DropdownMenuItem(value: ThemeMode.light, child: Text('Light')),
-                DropdownMenuItem(value: ThemeMode.dark, child: Text('Dark')),
-              ],
-              onChanged: _onThemeChanged,
-            ),
-            if (isGuest) ...[
-              const SizedBox(height: 8),
-              const Text(
-                'Sign in to make this preference part of your account — right now it\'s saved on this device only.',
-                style: TextStyle(color: Colors.grey, fontSize: 12),
+            return Scaffold(
+              appBar: AppBar(title: const Text('Settings')),
+              body: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Text('Theme',
+                            style: TextStyle(
+                                fontWeight: FontWeight.bold, fontSize: 16)),
+                        if (_isSaving) ...[
+                          const SizedBox(width: 8),
+                          const SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    DropdownButton<ThemeMode>(
+                      value: currentTheme,
+                      isExpanded: true,
+                      items: const [
+                        DropdownMenuItem(
+                            value: ThemeMode.light, child: Text('Light')),
+                        DropdownMenuItem(
+                            value: ThemeMode.dark, child: Text('Dark')),
+                      ],
+                      onChanged: _isSaving ? null : _onThemeChanged,
+                    ),
+                    if (isGuest) ...[
+                      const SizedBox(height: 8),
+                      const Text(
+                        'Sign in to make this preference part of your account — right now it\'s saved on this device only.',
+                        style: TextStyle(color: Colors.grey, fontSize: 12),
+                      ),
+                    ],
+                  ],
+                ),
               ),
-            ],
-          ],
-        ),
-      ),
+            );
+          },
+        );
+      },
     );
   }
 }

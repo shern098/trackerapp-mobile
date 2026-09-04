@@ -23,6 +23,7 @@ class _AccountScreenState extends State<AccountScreen> {
   final _authService = AuthService();
   final _picker = ImagePicker(); // same instance pattern as Practical 8
   File? _image;
+  bool _isSavingImage = false;
 
   @override
   void initState() {
@@ -44,8 +45,11 @@ class _AccountScreenState extends State<AccountScreen> {
   // Same shape as Practical 8's getImageFromGallery().
   Future<void> _pickAndSaveImage() async {
     final user = currentUserNotifier.value;
-    if (user == null) return;
+    if (user == null || _isSavingImage) return;
 
+    setState(() => _isSavingImage = true);
+
+    try{
     final pickedFile = await _picker.pickImage(source: ImageSource.gallery);
     if (pickedFile == null) return;
 
@@ -59,8 +63,17 @@ class _AccountScreenState extends State<AccountScreen> {
     await _authService.updateProfilePicture(user, newImagePath);
     currentUserNotifier.value = user.copyWith(profilePicturePath: newImagePath);
 
+    if(!mounted)return;
     setState(() => _image = savedImage);
-  }
+  }catch(e){
+      if(!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not update profile picture: $e')),
+      );
+    }finally{
+      if (mounted) setState(()=>_isSavingImage = false);
+    }
+}
 
   void _logout() async {
     await _authService.logout();
@@ -69,7 +82,8 @@ class _AccountScreenState extends State<AccountScreen> {
     // than hardcoding back to Light — a guest who prefers Dark shouldn't
     // get bounced to Light just because they logged out of an account
     // that happened to be set to Light.
-    themeModeNotifier.value = await ThemeService().loadThemeMode();
+    final guestTheme = await ThemeService().loadThemeMode();
+    themeModeNotifier.value = guestTheme;
     if (mounted) Navigator.pop(context);
   }
 
@@ -94,16 +108,47 @@ class _AccountScreenState extends State<AccountScreen> {
           children: [
             GestureDetector(
               onTap: _pickAndSaveImage,
-              child: CircleAvatar(
-                radius: 50,
-                backgroundImage: _image != null ? FileImage(_image!) : null,
-                child: _image == null ? const Icon(Icons.person, size: 50) : null,
+              child: Stack(
+                alignment: Alignment.bottomRight,
+                children: [
+                  CircleAvatar(
+                    radius: 50,
+                    backgroundImage: _image != null ? FileImage(_image!) : null,
+                    child: _image == null
+                        ? const Icon(Icons.person, size: 50)
+                        : null,
+                  ),
+                  if (_isSavingImage)
+                    const Positioned.fill(
+                      child: CircleAvatar(
+                        radius: 50,
+                        backgroundColor: Colors.black45,
+                        child: SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor:
+                            AlwaysStoppedAnimation<Color>(Colors.white),
+                          ),
+                        ),
+                      ),
+                    )
+                  else
+                    const CircleAvatar(
+                      radius: 14,
+                      child: Icon(Icons.edit, size: 14),
+                    ),
+                ],
               ),
             ),
             const SizedBox(height: 8),
-            const Text('Tap to change profile picture', style: TextStyle(color: Colors.grey)),
+            const Text('Tap to change profile picture',
+                style: TextStyle(color: Colors.grey)),
             const SizedBox(height: 24),
-            Text(user.username, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+            Text(user.username,
+                style:
+                const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
             const SizedBox(height: 32),
             SizedBox(
               width: double.infinity,
