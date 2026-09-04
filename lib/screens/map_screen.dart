@@ -5,6 +5,7 @@ import 'package:flutter_map_location_marker/flutter_map_location_marker.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:location/location.dart';
 import 'package:permission_handler/permission_handler.dart' as handler;
+import '../widgets/app_drawer.dart';
 
 class MapScreen extends StatefulWidget {
   const MapScreen({super.key});
@@ -93,6 +94,7 @@ class _MapScreenState extends State<MapScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      drawer: const AppDrawer(),
       body: Stack(
         children: [
           FlutterMap(
@@ -111,6 +113,28 @@ class _MapScreenState extends State<MapScreen> {
               if (_permissionGranted && _gpsEnabled) CurrentLocationLayer(),
             ],
           ),
+
+          Positioned(
+            top: 16,
+            left: 16,
+            child: Builder(
+              builder: (context) => GestureDetector(
+                onTap: (){
+                  debugPrint("hamburger menu tapped");
+                  Scaffold.of(context).openDrawer();
+                },
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1C1C1C),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.menu, color: Colors.white),
+                ),
+              ),
+            ),
+          ),
+
         ],
       ),
     );
