@@ -26,11 +26,10 @@ class RouteInfo {
 class TransitApiService {
   final _gtfs = GtfsService();
 
-  // Called from AddBusScreen when the user looks up a bus number.
-  Future<RouteInfo?> fetchBusInfo(String busNumber) async {
+  Future<RouteInfo?> fetchBusInfo(String busNumber, {String category= 'rapid-bus-kl'}) async {
     try {
       final info = await _gtfs.lookupRoute(
-        'rapid-bus-kl',
+        category,
         busNumber,
         matchLongName: false,
       );
@@ -43,11 +42,10 @@ class TransitApiService {
     }
   }
 
-  // Called from AddTrainScreen when the user looks up a train line.
-  Future<RouteInfo?> fetchTrainInfo(String lineName) async {
+  Future<RouteInfo?> fetchTrainInfo(String lineName, {String category = 'rapid-rail-kl'}) async {
     try {
       final info = await _gtfs.lookupRoute(
-        'rapid-rail-kl',
+        category,
         lineName,
         matchLongName: true,
       );
@@ -61,38 +59,38 @@ class TransitApiService {
     }
   }
 
-  Future<List<String>?> listBusNumbers() async {
+  Future<List<String>?> listBusNumbers({String category = 'rapid-bus-kl'}) async {
     try {
-      return await _gtfs.listRouteNames('rapid-bus-kl', useLongName: false);
+      return await _gtfs.listRouteNames(category, useLongName: false);
     } catch (e) {
-      log('Could not load live bus number list ($e.');
+      log('Could not load live bus number list for $category ($e).');
       return null;
     }
   }
 
-  Future<List<String>?>listTrainLines() async {
+  Future<List<String>?> listTrainLines({String category = 'rapid-rail-kl'}) async {
     try {
-      return await _gtfs.listRouteNames('rapid-rail-kl', useLongName: true);
+      return await _gtfs.listRouteNames(category, useLongName: true);
     } catch (e) {
-      log('Could not load live train line list ($e).');
+      log('Could not load live train line list for $category ($e).');
       return null;
     }
   }
 
-  Future<List<LatLng>> fetchBusRouteShape(String busNumber) async {
+  Future<List<LatLng>> fetchBusRouteShape(String busNumber, {String category = 'rapid-bus-kl'}) async {
     try {
-      return await _gtfs.getRouteShapePoints('rapid-bus-kl', busNumber, matchLongName: false);
+      return await _gtfs.getRouteShapePoints(category, busNumber, matchLongName: false);
     } catch (e) {
-      log('Could not load route shape for bus "$busNumber" ($e).');
+      log('Could not load route shape for bus "$busNumber" in $category ($e).');
       return [];
     }
   }
 
-  Future<List<LatLng>> fetchTrainRouteShape(String lineName) async {
+  Future<List<LatLng>> fetchTrainRouteShape(String lineName, {String category = 'rapid-rail-kl'}) async {
     try {
-      return await _gtfs.getRouteShapePoints('rapid-rail-kl', lineName, matchLongName: true);
+      return await _gtfs.getRouteShapePoints(category, lineName, matchLongName: true);
     } catch (e) {
-      log('Could not load route shape for train line "$lineName" ($e).');
+      log('Could not load route shape for train line "$lineName" in $category ($e).');
       return [];
     }
   }

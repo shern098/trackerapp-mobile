@@ -28,15 +28,32 @@ class GtfsService {
 
     await feedDir.create(recursive: true);
     final archive = ZipDecoder().decodeBytes(response.bodyBytes);
+
     for (final file in archive) {
-      if (file.isFile) {
-        final outFile = File('${feedDir.path}/${file.name}');
+      if (!file.isFile) continue;
+
+      // Skip macOS metadata junk that isn't real GTFS data
+      if (file.name.startsWith('__MACOSX/') ||
+          file.name.split('/').last.startsWith('._')) {
+        continue;
+      }
+
+      final outFile = File('${feedDir.path}/${file.name}');
+
+      try {
+        // Handles any nested folder structure inside the zip
+        await outFile.parent.create(recursive: true);
         await outFile.writeAsBytes(file.content as List<int>);
+      } catch (e) {
+        // Don't let one bad entry kill extraction of the rest
+        log('Skipping bad zip entry "${file.name}": $e');
       }
     }
+
     log('GTFS feed for $category extracted to ${feedDir.path}');
     return feedDir;
   }
+
 
   Future<List<Map<String, dynamic>>> _readCsv(Directory feedDir, String filename) async {
     final cacheKey = '${feedDir.path}/$filename';
@@ -83,11 +100,19 @@ class GtfsService {
     final routes = await _readCsv(feedDir, 'routes.txt');
     final normalizedQuery = query.trim().toLowerCase();
     final route = routes.firstWhere(
-      (r) => matchLongName
-          ? (r['route_long_name']?.toString().toLowerCase() ?? '')
-              .contains(normalizedQuery)
-          : (r['route_short_name']?.toString().toLowerCase() ?? '') ==
-              normalizedQuery,
+          (r) {
+        if (matchLongName) {
+          return (r['route_long_name']?.toString().toLowerCase() ?? '')
+              .contains(normalizedQuery);
+        }
+        final shortName = r['route_short_name']?.toString().toLowerCase() ?? '';
+        if (shortName == normalizedQuery) return true;
+        // some feeds (e.g. mrtfeeder) leave short_name blank and put the code in long_name
+        if (shortName.isEmpty) {
+          return (r['route_long_name']?.toString().toLowerCase() ?? '') == normalizedQuery;
+        }
+        return false;
+      },
       orElse: () => {},
     );
     if (route.isEmpty) return null;
@@ -138,10 +163,15 @@ class GtfsService {
     final feedDir = await _ensureFeedReady(category);
     final routes = await _readCsv(feedDir, 'routes.txt');
     return routes
-        .map((r) => useLongName ? r['route_long_name'] : r['route_short_name'])
-        .where((name) => name != null && name.toString().trim().isNotEmpty)
-        .map((name) => name.toString())
-        .toSet() // some feeds repeat the same short/long name across multiple route_id rows
+        .map((r) {
+      final primary = useLongName ? r['route_long_name'] : r['route_short_name'];
+      final primaryStr = primary?.toString().trim() ?? '';
+      if (primaryStr.isNotEmpty) return primaryStr;
+      final fallback = useLongName ? r['route_short_name'] : r['route_long_name'];
+      return fallback?.toString().trim() ?? '';
+    })
+        .where((name) => name.isNotEmpty)
+        .toSet()
         .toList();
   }
 
@@ -155,11 +185,18 @@ class GtfsService {
     final routes = await _readCsv(feedDir, 'routes.txt');
     final normalizedQuery = query.trim().toLowerCase();
     final route = routes.firstWhere(
-      (r) => matchLongName
-          ? (r['route_long_name']?.toString().toLowerCase() ?? '')
-              .contains(normalizedQuery)
-          : (r['route_short_name']?.toString().toLowerCase() ?? '') ==
-              normalizedQuery,
+          (r) {
+        if (matchLongName) {
+          return (r['route_long_name']?.toString().toLowerCase() ?? '')
+              .contains(normalizedQuery);
+        }
+        final shortName = r['route_short_name']?.toString().toLowerCase() ?? '';
+        if (shortName == normalizedQuery) return true;
+        if (shortName.isEmpty) {
+          return (r['route_long_name']?.toString().toLowerCase() ?? '') == normalizedQuery;
+        }
+        return false;
+      },
       orElse: () => {},
     );
     if (route.isEmpty) return [];
@@ -174,7 +211,6 @@ class GtfsService {
     final tripId = trip['trip_id'].toString();
     final shapeId = trip['shape_id']?.toString();
 
-    // --- Preferred path: real shapes.txt data ---
     if (shapeId != null && shapeId.isNotEmpty) {
       final shapes = await _readCsv(feedDir, 'shapes.txt');
       final points = shapes.where((s) => s['shape_id'].toString() == shapeId).toList()

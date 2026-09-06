@@ -8,22 +8,22 @@ class VehiclePositionInfo {
   final String? routeId;
   final double latitude;
   final double longitude;
+  final String category;
 
   VehiclePositionInfo({
     required this.vehicleId,
     required this.routeId,
     required this.latitude,
     required this.longitude,
+    required this.category,
   });
 }
 
 class BusRealtimeService {
-  static const _url =
-      'https://api.data.gov.my/gtfs-realtime/vehicle-position/prasarana?category=rapid-bus-mrtfeeder';
+  static const _baseUrl = 'https://api.data.gov.my/gtfs-realtime/vehicle-position/prasarana';
 
-  Future<List<VehiclePositionInfo>> fetchVehiclePositions() async {
-    final response = await http.get(Uri.parse(_url));
-    log('*** status: ${response.statusCode}, bytes: ${response.bodyBytes.length}');
+  Future<List<VehiclePositionInfo>> fetchVehiclePositions(String category) async {
+    final response = await http.get(Uri.parse('$_baseUrl?category=$category'));
 
     if (response.statusCode != 200) {
       throw Exception('Failed to load vehicle positions: ${response.statusCode}');
@@ -38,6 +38,7 @@ class BusRealtimeService {
               routeId: e.vehicle.hasTrip() ? e.vehicle.trip.routeId : null,
               latitude: e.vehicle.position.latitude,
               longitude: e.vehicle.position.longitude,
+              category: category,
             ))
         .toList();
   }

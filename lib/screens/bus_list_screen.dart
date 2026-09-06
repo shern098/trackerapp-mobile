@@ -27,6 +27,13 @@ class _BusListScreenState extends State<BusListScreen> {
 
   final _searchController = TextEditingController();
 
+  static const _busCategories = [
+    'rapid-bus-kl',
+    'rapid-bus-penang',
+    'rapid-bus-kuantan',
+    'rapid-bus-mrtfeeder',
+  ];
+
   @override
   void initState() {
     super.initState();
@@ -46,11 +53,23 @@ class _BusListScreenState extends State<BusListScreen> {
     if (mounted) setState(() { _savedBuses = buses; _isLoadingSaved = false; });
   }
 
+
   void _loadAllBusNumbers() async {
-    final numbers = await _apiService.listBusNumbers();
-    if(numbers != null){
-      if (mounted) setState(() { _allBusNumbers = numbers; _isLoadingAll = false; });
-    };
+    final results = await Future.wait(
+      _busCategories.map((cat) async {
+        final numbers = await _apiService.listBusNumbers(category: cat);
+        return numbers ?? <String>[];
+      }),
+    );
+
+    final merged = results.expand((x) => x).toSet().toList()..sort();
+
+    if (mounted) {
+      setState(() {
+        _allBusNumbers = merged;
+        _isLoadingAll = false;
+      });
+    }
   }
 
   bool _isSaved(String busNumber) => _savedBuses.any((b) => b.busNumber == busNumber);
