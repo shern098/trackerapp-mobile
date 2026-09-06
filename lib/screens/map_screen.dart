@@ -1,11 +1,21 @@
 import 'dart:async';
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_map_location_marker/flutter_map_location_marker.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:location/location.dart';
 import 'package:permission_handler/permission_handler.dart' as handler;
+import '../main.dart' show currentUserNotifier;
 import '../widgets/app_drawer.dart';
+import '../services/bus_realtime_service.dart';
+import '../services/route_lookup_service.dart';
+import '../services/transit_api_service.dart';
+import '../services/database_service.dart';
+import '../services/notification_service.dart';
+import '../models/bus_model.dart';
+import '../models/train_model.dart';
+
 
 class MapScreen extends StatefulWidget {
   const MapScreen({super.key});
@@ -19,20 +29,66 @@ class _MapScreenState extends State<MapScreen> {
   final MapController _mapController = MapController();
   final Location _location = Location();
 
+  final _busRealtimeService = BusRealtimeService();
+  final _routeLookupService = RouteLookupService();
+  final _transitApiService = TransitApiService();
+  final _notificationService = NotificationService();
+  final _dbService = DatabaseService();
+
+  List<VehiclePositionInfo> _liveBuses = [];
+  Map<String, String> _routeIdToShortName = {};
+  List<BusModel> _savedBuses = [];
+  final Map<String, List<LatLng>> _routeShapeCache = {};
+  List<TrainModel> _savedTrains = [];
+  final Map<String, List<LatLng>> _trainRouteShapeCache = {};
+
   Timer? _pollTimer;
   StreamSubscription<LocationData>? _locationSub;
+
+  final Set<int> _activeAlertIds = {};
+  static const double _geofenceRadiusMeters = 300;
 
   bool _permissionGranted = false;
   bool _gpsEnabled = false;
 
   final LatLng _fallbackCenter = LatLng(3.1466, 101.6958); // Kuala Lumpur
   String? _selectedVehicleLabel;
+  String? _selectedVehicleEta;
 
-  Future<bool> isPermissionGranted() async {
-    return await handler.Permission.locationWhenInUse.isGranted;
+  List<VehiclePositionInfo> get _visibleBuses {
+    final visibleNumbers = _savedBuses
+        .where((b) => b.iconVisible == 1)
+        .map((b) => b.busNumber)
+        .toSet();
+    if (visibleNumbers.isEmpty) return [];
+    return _liveBuses.where((bus) {
+      final shortName = bus.routeId != null ? _routeIdToShortName[bus.routeId] : null;
+      return shortName != null && visibleNumbers.contains(shortName);
+    }).toList();
   }
-  Future<bool> isGpsEnabled() async {
-    return await handler.Permission.location.serviceStatus.isEnabled;
+
+  List<Polyline> get _visiblePolylines {
+    final busPolylines = _savedBuses
+        .where((b) =>
+    b.routeVisible == 1 &&
+        (_routeShapeCache[b.busNumber]?.isNotEmpty ?? false))
+        .map((b) => Polyline(
+      points: _routeShapeCache[b.busNumber]!,
+      strokeWidth: 4,
+      color: Colors.blue,
+    ));
+
+    final trainPolylines = _savedTrains
+        .where((t) =>
+    t.visible == 1 &&
+        (_trainRouteShapeCache[t.lineName]?.isNotEmpty ?? false))
+        .map((t) => Polyline(
+      points: _trainRouteShapeCache[t.lineName]!,
+      strokeWidth: 4,
+      color: Colors.orange,
+    ));
+
+    return [...busPolylines, ...trainPolylines];
   }
 
   @override
@@ -40,6 +96,146 @@ class _MapScreenState extends State<MapScreen> {
     _pollTimer?.cancel();
     _locationSub?.cancel();
     super.dispose();
+  }
+
+
+  double _distanceMeters(double lat1, double lon1, double lat2, double lon2) {
+    const r = 6371000.0; // Earth's radius in meters
+    final dLat = (lat2 - lat1) * pi / 180;
+    final dLon = (lon2 - lon1) * pi / 180;
+    final a = sin(dLat / 2) * sin(dLat / 2) +
+        cos(lat1 * pi / 180) * cos(lat2 * pi / 180) * sin(dLon / 2) * sin(dLon / 2);
+    final c = 2 * atan2(sqrt(a), sqrt(1 - a));
+    return r * c;
+  }
+
+  void _showLocationFallbackMessage() {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Unable to get your location. Showing default view.')),
+    );
+  }
+
+  void _startGeofenceWatch() {
+    _locationSub = _location.onLocationChanged.listen((locData) async {
+      if (locData.latitude == null || locData.longitude == null) return;
+
+      final userId = currentUserNotifier.value?.id;
+      if (userId == null) return; // not signed in — nothing to check
+
+      final alerts = await _dbService.getNotifications(userId);
+
+      for (final alert in alerts) {
+        VehiclePositionInfo? matchingBus;
+        for (final bus in _liveBuses) {
+          final shortName = bus.routeId != null ? _routeIdToShortName[bus.routeId] : null;
+          if (shortName == alert.routeRef) {
+            matchingBus = bus;
+            break;
+          }
+        }
+
+        if (matchingBus == null) {
+          _activeAlertIds.remove(alert.id);
+          continue;
+        }
+
+        final distance = _distanceMeters(
+            locData.latitude!, locData.longitude!, matchingBus.latitude, matchingBus.longitude);
+        final withinRadius = distance <= _geofenceRadiusMeters;
+        final isCurrentlyActive = _activeAlertIds.contains(alert.id);
+
+        if (withinRadius && !isCurrentlyActive) {
+          _activeAlertIds.add(alert.id);
+          await _notificationService.showAlert(
+            id: alert.id,
+            title: 'Bus ${alert.routeRef} nearby',
+            body: 'Bus ${alert.routeRef} is within ${_geofenceRadiusMeters.round()}m of you.',
+          );
+        } else if (!withinRadius && isCurrentlyActive) {
+          _activeAlertIds.remove(alert.id);
+        }
+      }
+    });
+  }
+
+  Future<void> _refreshSavedBuses() async {
+    final userId = currentUserNotifier.value?.id;
+    final buses = userId != null ? await _dbService.getBuses(userId) : <BusModel>[];
+    if (mounted) setState(() => _savedBuses = buses);
+  }
+
+  Future<void> _refreshRouteShapes() async {
+    for (final bus in _savedBuses) {
+      if (bus.routeVisible == 1 && !_routeShapeCache.containsKey(bus.busNumber)) {
+        final shape = await _transitApiService.fetchBusRouteShape(bus.busNumber);
+        if (mounted) setState(() => _routeShapeCache[bus.busNumber] = shape);
+      }
+    }
+  }
+
+  Future<void> _refreshSavedTrains() async {
+    final userId = currentUserNotifier.value?.id;
+    final trains = userId != null ? await _dbService.getTrains(userId) : <TrainModel>[];
+    if (mounted) setState(() => _savedTrains = trains);
+  }
+
+  Future<void> _refreshTrainRouteShapes() async {
+    for (final train in _savedTrains) {
+      if (train.visible == 1 && !_trainRouteShapeCache.containsKey(train.lineName)) {
+        final shape = await _transitApiService.fetchTrainRouteShape(train.lineName);
+        if (mounted) setState(() => _trainRouteShapeCache[train.lineName] = shape);
+      }
+    }
+  }
+
+  Future<void> _fetchLiveBuses() async {
+    try {
+      final positions = await _busRealtimeService.fetchVehiclePositions();
+      debugPrint('>>> Fetched ${positions.length} live bus positions');
+
+      final resolved = <String, String>{};
+      for (final bus in positions) {
+        if (bus.routeId == null) continue;
+        final shortName =
+        await _routeLookupService.shortNameForRouteId('rapid-bus-kl', bus.routeId!);
+        if (shortName != null) resolved[bus.routeId!] = shortName;
+      }
+
+      if (mounted) {
+        setState(() {
+          _liveBuses = positions;
+          _routeIdToShortName = resolved;
+        });
+      }
+    } catch (e) {
+      debugPrint('>>> Failed to fetch live bus positions: $e');
+    }
+  }
+
+  void _refreshAll() async {
+    await _fetchLiveBuses();
+    await _refreshSavedBuses();
+    await _refreshRouteShapes();
+    await _refreshSavedTrains();
+    await _refreshTrainRouteShapes();
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    checkStatus();
+    _refreshAll();
+    _pollTimer = Timer.periodic(const Duration(seconds: 30), (_) => _refreshAll());
+    _startGeofenceWatch();
+  }
+
+  Future<bool> isPermissionGranted() async {
+    return await handler.Permission.locationWhenInUse.isGranted;
+  }
+
+  Future<bool> isGpsEnabled() async {
+    return await handler.Permission.location.serviceStatus.isEnabled;
   }
 
   void checkStatus() async{
@@ -74,20 +270,6 @@ class _MapScreenState extends State<MapScreen> {
     } else {
       _showLocationFallbackMessage();
     }
-  }
-
-  void _showLocationFallbackMessage() {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Unable to get your location. Showing default view.')),
-    );
-  }
-
-
-  @override
-  void initState() {
-    super.initState();
-    checkStatus();
   }
 
 

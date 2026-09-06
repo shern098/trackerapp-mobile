@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../main.dart' show currentUserNotifier;
+import '../models/user_model.dart';
+
 class AppDrawer extends StatelessWidget {
   const AppDrawer({super.key});
 
@@ -36,9 +39,23 @@ class AppDrawer extends StatelessWidget {
 
             _sectionHeader(Icons.train, 'Train Configuration'),
             _drawerItem(context, 'Train List', '/train_list'),
+            const SizedBox(height: 20),
 
+            _sectionHeader(Icons.add_alert, 'Notification Configuration'),
+            _drawerItem(context, 'Notifications', '/notifications'),
             const Spacer(),
 
+            ValueListenableBuilder<UserModel?>(
+              valueListenable: currentUserNotifier,
+              builder: (context, user, _) {
+                return _drawerItem(
+                  context,
+                  user == null ? 'Log In' : 'Account',
+                  user == null ? '/login' : '/account',
+                  icon: Icons.person_outline,
+                );
+              },
+            ),
             _drawerItem(context, 'Settings', '/settings', icon: Icons.settings_outlined),
             const SizedBox(height: 20),
           ],

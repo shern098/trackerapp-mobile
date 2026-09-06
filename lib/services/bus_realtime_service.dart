@@ -1,0 +1,41 @@
+import 'package:http/http.dart' as http;
+import '../generated/gtfs-realtime.pb.dart';
+
+class VehiclePositionInfo {
+  final String vehicleId;
+  final String? routeId;
+  final double latitude;
+  final double longitude;
+
+  VehiclePositionInfo({
+    required this.vehicleId,
+    required this.routeId,
+    required this.latitude,
+    required this.longitude,
+  });
+}
+
+class BusRealtimeService {
+  static const _url =
+      'https://api.data.gov.my/gtfs-realtime/vehicle-position/prasarana?category=rapid-bus-kl';
+
+  Future<List<VehiclePositionInfo>> fetchVehiclePositions() async {
+    final response = await http.get(Uri.parse(_url));
+
+    if (response.statusCode != 200) {
+      throw Exception('Failed to load vehicle positions: ${response.statusCode}');
+    }
+
+    final feed = FeedMessage.fromBuffer(response.bodyBytes);
+
+    return feed.entity
+        .where((e) => e.hasVehicle() && e.vehicle.hasPosition())
+        .map((e) => VehiclePositionInfo(
+              vehicleId: e.vehicle.vehicle.id,
+              routeId: e.vehicle.hasTrip() ? e.vehicle.trip.routeId : null,
+              latitude: e.vehicle.position.latitude,
+              longitude: e.vehicle.position.longitude,
+            ))
+        .toList();
+  }
+}
