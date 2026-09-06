@@ -3,12 +3,7 @@ import '../main.dart' show themeModeNotifier, currentUserNotifier;
 import '../services/theme_service.dart';
 import '../services/auth_service.dart';
 
-/// Lets the user switch between light and dark theme via a dropdown.
-/// If signed in, the choice is saved to that account's row in the Users
-/// table (via AuthService), so it's remembered per-account. If not
-/// signed in, it falls back to a single app-wide guest preference saved
-/// with SharedPreferences (ThemeService — same pattern as Practical 7),
-/// so switching themes still works before anyone logs in.
+
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
 
@@ -25,27 +20,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (mode == null || _isSaving) return;
 
     final previousMode = themeModeNotifier.value;
-    themeModeNotifier.value = mode; // updates the running app immediately
+    themeModeNotifier.value = mode;
     setState(() => _isSaving = true);
 
     final user = currentUserNotifier.value;
     try {
       if (user != null) {
-        // Signed in — persist to this account specifically.
         await _authService.updateThemeMode(
             user, mode == ThemeMode.dark ? 'dark' : 'light');
       } else {
-        // Not signed in — fall back to a single app-wide guest preference.
         await _themeService.saveThemeMode(mode);
       }
     } catch (e) {
-      // Saving failed — revert the visible theme so the UI doesn't claim
-      // a preference that wasn't actually persisted, and let the user know.
       themeModeNotifier.value = previousMode;
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not save theme: $e')),
+          SnackBar(content: Text('Could not save theme')),
         );
+        debugPrint('>>>theme update fail : $e');
       }
     } finally {
       if (mounted) setState(() => _isSaving = false);

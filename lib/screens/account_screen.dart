@@ -7,11 +7,6 @@ import '../services/auth_service.dart';
 import '../services/theme_service.dart';
 import '../models/user_model.dart';
 
-/// Shows the signed-in user's profile picture (tap to change — same
-/// image_picker + "copy into app documents folder" pattern as Practical
-/// 8's Data File example, just with a per-user filename instead of one
-/// single app-wide profile.png so multiple accounts don't overwrite each
-/// other's picture) plus their username and a logout button.
 class AccountScreen extends StatefulWidget {
   const AccountScreen({super.key});
 
@@ -21,7 +16,7 @@ class AccountScreen extends StatefulWidget {
 
 class _AccountScreenState extends State<AccountScreen> {
   final _authService = AuthService();
-  final _picker = ImagePicker(); // same instance pattern as Practical 8
+  final _picker = ImagePicker();
   File? _image;
   bool _isSavingImage = false;
 
@@ -31,8 +26,6 @@ class _AccountScreenState extends State<AccountScreen> {
     _loadProfileImage();
   }
 
-  // Same shape as Practical 8's loadProfileImage() — checks whether a
-  // saved picture file already exists for this user and shows it if so.
   void _loadProfileImage() {
     final user = currentUserNotifier.value;
     if (user?.profilePicturePath == null) return;
@@ -42,7 +35,6 @@ class _AccountScreenState extends State<AccountScreen> {
     }
   }
 
-  // Same shape as Practical 8's getImageFromGallery().
   Future<void> _pickAndSaveImage() async {
     final user = currentUserNotifier.value;
     if (user == null || _isSavingImage) return;
@@ -50,38 +42,31 @@ class _AccountScreenState extends State<AccountScreen> {
     setState(() => _isSavingImage = true);
 
     try{
-    final pickedFile = await _picker.pickImage(source: ImageSource.gallery);
-    if (pickedFile == null) return;
+      final pickedFile = await _picker.pickImage(source: ImageSource.gallery);
+      if (pickedFile == null) return;
 
-    // Same shape as Practical 8's savePicture() — copies the picked file
-    // into the app's own documents folder. The filename includes the
-    // user's id so each account's picture is stored separately.
-    final appDocDir = await getApplicationDocumentsDirectory();
-    final newImagePath = '${appDocDir.path}/profile_${user.id}.png';
-    final savedImage = await File(pickedFile.path).copy(newImagePath);
+      final appDocDir = await getApplicationDocumentsDirectory();
+      final newImagePath = '${appDocDir.path}/profile_${user.id}.png';
+      final savedImage = await File(pickedFile.path).copy(newImagePath);
 
-    await _authService.updateProfilePicture(user, newImagePath);
-    currentUserNotifier.value = user.copyWith(profilePicturePath: newImagePath);
+      await _authService.updateProfilePicture(user, newImagePath);
+      currentUserNotifier.value = user.copyWith(profilePicturePath: newImagePath);
 
-    if(!mounted)return;
-    setState(() => _image = savedImage);
-  }catch(e){
+      if(!mounted)return;
+      setState(() => _image = savedImage);
+    }catch(e){
       if(!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not update profile picture: $e')),
+        SnackBar(content: Text('Could not update profile picture: $e')),
       );
     }finally{
       if (mounted) setState(()=>_isSavingImage = false);
     }
-}
+  }
 
   void _logout() async {
     await _authService.logout();
     currentUserNotifier.value = null;
-    // Restore whatever the guest theme preference actually was, rather
-    // than hardcoding back to Light — a guest who prefers Dark shouldn't
-    // get bounced to Light just because they logged out of an account
-    // that happened to be set to Light.
     final guestTheme = await ThemeService().loadThemeMode();
     themeModeNotifier.value = guestTheme;
     if (mounted) Navigator.pop(context);
@@ -92,8 +77,6 @@ class _AccountScreenState extends State<AccountScreen> {
     final UserModel? user = currentUserNotifier.value;
 
     if (user == null) {
-      // Shouldn't normally happen (the drawer only routes here when
-      // logged in), but guards against a stale navigation stack.
       return Scaffold(
         appBar: AppBar(title: const Text('Account')),
         body: const Center(child: Text('You are not signed in.')),

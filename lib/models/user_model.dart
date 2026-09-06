@@ -1,9 +1,3 @@
-/// Represents one row from the "Users" SQLite table — a registered
-/// account. passwordHash is a SHA-256 hash (never the plain password —
-/// see auth_service.dart), profilePicturePath points to a locally-copied
-/// image file (same idea as Practical 8's Data File practical, just
-/// scoped per-user instead of one single app-wide profile.png), and
-/// themeMode is this user's saved Light/Dark preference.
 class UserModel {
   final int id;
   final String username;
@@ -35,8 +29,6 @@ class UserModel {
         'themeMode': themeMode,
       };
 
-  // Fields are immutable (`final`) — used to build an updated copy after
-  // changing the profile picture or theme, without touching username/password.
   UserModel copyWith({String? profilePicturePath, String? themeMode}) => UserModel(
         id: id,
         username: username,

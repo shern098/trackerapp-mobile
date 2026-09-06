@@ -3,9 +3,6 @@ import '../main.dart' show currentUserNotifier;
 import '../services/database_service.dart';
 import '../services/transit_api_service.dart';
 
-/// Same shape as AddBusScreen, for train lines instead of bus numbers —
-/// e.g. typing "kel" suggests "Kelana Jaya Line" before saving to the
-/// "Trains" table. Only reachable while signed in.
 class AddTrainScreen extends StatefulWidget {
   const AddTrainScreen({super.key});
 
@@ -14,10 +11,6 @@ class AddTrainScreen extends StatefulWidget {
 }
 
 class _AddTrainScreenState extends State<AddTrainScreen> {
-  // Captured from Autocomplete's fieldViewBuilder below — this is
-  // Autocomplete's own internally-managed controller, not one we create
-  // ourselves, so we must NOT dispose it (Autocomplete disposes it
-  // automatically; doing so ourselves too would crash).
   TextEditingController? _lineController;
   final _apiService = TransitApiService();
   final _dbService = DatabaseService();
@@ -25,7 +18,7 @@ class _AddTrainScreenState extends State<AddTrainScreen> {
   RouteInfo? _routeInfo;
   bool _isLoading = false;
   String? _errorText;
-  List<String> _allTrainLines = []; // powers the Autocomplete suggestions below
+  List<String> _allTrainLines = [];
 
   @override
   void initState() {
@@ -35,7 +28,7 @@ class _AddTrainScreenState extends State<AddTrainScreen> {
 
   void _loadTrainLineSuggestions() async {
     final lines = await _apiService.listTrainLines();
-    if (mounted) setState(() => _allTrainLines = lines);
+    if (mounted) setState(() => _allTrainLines = lines!);
   }
 
   void _lookupTrain() async {
@@ -89,8 +82,6 @@ class _AddTrainScreenState extends State<AddTrainScreen> {
             Autocomplete<String>(
               optionsBuilder: (TextEditingValue value) {
                 if (value.text.isEmpty) return const Iterable<String>.empty();
-                // Substring match, case-insensitive — this is what makes
-                // typing "kel" suggest "Kelana Jaya Line".
                 return _allTrainLines.where(
                     (line) => line.toLowerCase().contains(value.text.toLowerCase()));
               },
@@ -98,9 +89,6 @@ class _AddTrainScreenState extends State<AddTrainScreen> {
                 _lineController?.text = selection;
               },
               fieldViewBuilder: (context, controller, focusNode, onSubmitted) {
-                // Capture Autocomplete's own controller once so
-                // _lookupTrain() can read it directly — no separate mirror
-                // controller or listener needed.
                 _lineController = controller;
                 return TextField(
                   controller: controller,

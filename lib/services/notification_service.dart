@@ -13,8 +13,8 @@ class NotificationService {
 
     const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
     final windowsSettings = WindowsInitializationSettings(
-      appName: 'Transport Tracker',
-      appUserModelId: 'Com.TransportTracker.App',
+      appName: 'TrackerApp',
+      appUserModelId: 'Com.TrackerApp.App',
       guid: '92517ef0-7d73-4894-bcab-f356dce4a5e1',
     );
     final initSettings = InitializationSettings(

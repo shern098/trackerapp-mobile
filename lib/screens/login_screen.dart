@@ -3,9 +3,6 @@ import '../main.dart' show currentUserNotifier, themeModeNotifier;
 import '../services/auth_service.dart';
 import 'register_screen.dart';
 
-/// Username + password sign-in. On success, updates currentUserNotifier
-/// (which the rest of the app watches to decide what's accessible) and
-/// applies that user's saved theme preference.
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -51,12 +48,10 @@ class _LoginScreenState extends State<LoginScreen> {
       return;
     }
 
-    // Update the app-wide "who's logged in" state and apply their saved
-    // theme immediately.
     currentUserNotifier.value = user;
     themeModeNotifier.value = user.themeMode == 'dark' ? ThemeMode.dark : ThemeMode.light;
 
-    Navigator.pop(context); // back to whichever screen sent the user here
+    Navigator.pop(context);
   }
 
   @override

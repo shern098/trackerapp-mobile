@@ -2,9 +2,6 @@ import 'package:flutter/material.dart';
 import '../main.dart' show currentUserNotifier, themeModeNotifier;
 import '../services/auth_service.dart';
 
-/// Creates a new account. Requires the two password fields to match,
-/// then delegates to AuthService.register() — which also checks the
-/// username isn't already taken and auto-logs the new account in.
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
 
@@ -58,12 +55,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
       return;
     }
 
-    // register() auto-logs-in on success — reflect that app-wide.
     currentUserNotifier.value = user;
-    themeModeNotifier.value = ThemeMode.light; // new accounts default to light
+    themeModeNotifier.value = ThemeMode.light;
 
-    Navigator.pop(context); // back to Login
-    Navigator.pop(context); // back to whichever screen opened Login
+    Navigator.pop(context);
+    Navigator.pop(context);
   }
 
   @override

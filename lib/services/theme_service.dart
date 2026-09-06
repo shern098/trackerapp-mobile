@@ -1,13 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// Persists the user's chosen theme (light/dark) to local storage.
-///
-/// This follows the same pattern as Practical 7 (Shared Preferences):
-/// get an instance of SharedPreferences, then read/write simple key-value
-/// pairs with getString()/setString(). The only difference from the
-/// practical's name/email example is that we're storing a ThemeMode
-/// instead of free text, so it's converted to/from a plain string.
 class ThemeService {
   static const _themeKey = 'themeMode';
 
