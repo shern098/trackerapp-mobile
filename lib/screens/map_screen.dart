@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_map_location_marker/flutter_map_location_marker.dart';
@@ -12,7 +13,6 @@ import '../services/bus_realtime_service.dart';
 import '../services/route_lookup_service.dart';
 import '../services/transit_api_service.dart';
 import '../services/database_service.dart';
-import '../services/notification_service.dart';
 import '../models/bus_model.dart';
 import '../models/train_model.dart';
 
@@ -32,7 +32,6 @@ class _MapScreenState extends State<MapScreen> with RouteAware {
   final _busRealtimeService = BusRealtimeService();
   final _routeLookupService = RouteLookupService();
   final _transitApiService = TransitApiService();
-  final _notificationService = NotificationService();
   final _dbService = DatabaseService();
 
   List<VehiclePositionInfo> _liveBuses = [];
@@ -113,14 +112,12 @@ class _MapScreenState extends State<MapScreen> with RouteAware {
 
   @override
   void didPopNext() {
-    // Called when the top route has been popped off, and the current route (Map) shows up.
-    debugPrint('>>> Returning to MapScreen: Refreshing data...');
     _refreshAll();
   }
 
 
   double _distanceMeters(double lat1, double lon1, double lat2, double lon2) {
-    const r = 6371000.0; // Earth's radius in meters
+    const r = 6371000.0;
     final dLat = (lat2 - lat1) * pi / 180;
     final dLon = (lon2 - lon1) * pi / 180;
     final a = sin(dLat / 2) * sin(dLat / 2) +
@@ -148,7 +145,8 @@ class _MapScreenState extends State<MapScreen> with RouteAware {
       for (final alert in alerts) {
         VehiclePositionInfo? matchingBus;
         for (final bus in _liveBuses) {
-          final shortName = bus.routeId != null ? _routeIdToShortName[bus.routeId] : null;
+          final key = bus.routeId != null ? '${bus.category}_${bus.routeId}' : null;
+          final shortName = key != null ? _routeIdToShortName[key] : null;
           if (shortName == alert.routeRef) {
             matchingBus = bus;
             break;
@@ -167,16 +165,31 @@ class _MapScreenState extends State<MapScreen> with RouteAware {
 
         if (withinRadius && !isCurrentlyActive) {
           _activeAlertIds.add(alert.id);
-          await _notificationService.showAlert(
-            id: alert.id,
-            title: 'Bus ${alert.routeRef} nearby',
-            body: 'Bus ${alert.routeRef} is within ${_geofenceRadiusMeters.round()}m of you.',
-          );
+          _showProximityPopup(alert.routeRef);
         } else if (!withinRadius && isCurrentlyActive) {
           _activeAlertIds.remove(alert.id);
         }
       }
     });
+  }
+
+  void _showProximityPopup(String routeRef) {
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('Bus $routeRef nearby'),
+        content: Text(
+          'Bus $routeRef is within ${_geofenceRadiusMeters.round()}m of you.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _refreshSavedBuses() async {
@@ -385,6 +398,19 @@ class _MapScreenState extends State<MapScreen> with RouteAware {
               ),
             ),
           ),
+
+          if (kDebugMode)
+            Positioned(
+              bottom: 100,
+              right: 16,
+              child: FloatingActionButton(
+                heroTag: 'debug_notif',
+                backgroundColor: Colors.red,
+                onPressed: () => _showProximityPopup('780'),
+                child: const Icon(Icons.bug_report),
+              ),
+            ),
+
           if (_selectedVehicleLabel != null)
             Positioned(
               left: 16,
