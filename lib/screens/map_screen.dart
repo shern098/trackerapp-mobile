@@ -55,20 +55,23 @@ class _MapScreenState extends State<MapScreen> with RouteAware {
   String? _selectedVehicleLabel;
   String? _selectedVehicleEta;
 
-  List<VehiclePositionInfo> get _visibleBuses => _liveBuses; //!!!show all in case dov data unavailable AGAIN ?!!!@#!@#!#!!!
+  // List<VehiclePositionInfo> get _visibleBuses => _liveBuses; //!!!show all in case dov data unavailable AGAIN ?!!!@#!@#!#!!!
 
   // !!!show only in my list !!1
-  // List<VehiclePositionInfo> get _visibleBuses {
-  //   final visibleNumbers = _savedBuses
-  //       .where((b) => b.iconVisible == 1)
-  //       .map((b) => b.busNumber)
-  //       .toSet();
-  //   if (visibleNumbers.isEmpty) return [];
-  //   return _liveBuses.where((bus) {
-  //     final shortName = bus.routeId != null ? _routeIdToShortName[bus.routeId] : null;
-  //     return shortName != null && visibleNumbers.contains(shortName);
-  //   }).toList();
-  // }
+  List<VehiclePositionInfo> get _visibleBuses {
+    final visibleNumbers = _savedBuses
+        .where((b) => b.iconVisible == 1)
+        .map((b) => b.busNumber)
+        .toSet();
+
+    if (visibleNumbers.isEmpty) return [];
+
+    return _liveBuses.where((bus) {
+      final key = bus.routeId != null ? '${bus.category}_${bus.routeId}' : null;
+      final shortName = key != null ? _routeIdToShortName[key] : null;
+      return shortName != null && visibleNumbers.contains(shortName);
+    }).toList();
+  }
 
   List<Polyline> get _visiblePolylines {
     final busPolylines = _savedBuses
@@ -207,27 +210,48 @@ class _MapScreenState extends State<MapScreen> with RouteAware {
   }
 
   Future<void> _fetchLiveBuses() async {
+    final categories = [
+      'rapid-bus-kl',
+      'rapid-bus-penang',
+      'rapid-bus-kuantan',
+      'rapid-bus-mrtfeeder',
+      'rapid-rail-kl',
+    ];
+
     try {
-      final positions = await _busRealtimeService.fetchVehiclePositions();
-      debugPrint('>>> Fetched ${positions.length} live bus positions');
+      final results = await Future.wait(
+        categories.map((cat) async {
+          final positions = await _busRealtimeService
+          .fetchVehiclePositions(cat)
+          .catchError((e) => <VehiclePositionInfo>[]);
+
+          debugPrint('>>> Fetched ${positions.length} live positions from $cat');
+          return positions;
+        }),
+      );
+
+      final allPositions = results.expand((x) => x).toList();
 
       final resolved = <String, String>{};
-      for (final bus in positions) {
-        if (bus.routeId == null) continue;
-        final shortName =
-        await _routeLookupService.shortNameForRouteId('rapid-bus-kl', bus.routeId!);
-        if (shortName != null) resolved[bus.routeId!] = shortName;
+      for (final bus in allPositions) {
+      if (bus.routeId == null) continue;
+
+      final key = '${bus.category}_${bus.routeId}';
+      if (resolved.containsKey(key)) continue;
+
+      final shortName = await _routeLookupService.shortNameForRouteId(bus.category, bus.routeId!);
+      if (shortName != null) resolved[key] = shortName;
       }
 
       if (mounted) {
-        setState(() {
-          _liveBuses = positions;
-          _routeIdToShortName = resolved;
-        });
+      setState(() {
+      _liveBuses = allPositions;
+      _routeIdToShortName = resolved;
+      });
       }
-    } catch (e) {
+      } catch (e) {
       debugPrint('>>> Failed to fetch live bus positions: $e');
-    }
+      }
   }
 
   void _refreshAll() async {

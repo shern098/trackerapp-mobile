@@ -46,7 +46,7 @@ class _TrainListScreenState extends State<TrainListScreen> {
 
   void _loadAllTrainLines() async {
     final lines = await _apiService.listTrainLines();
-    if (mounted) setState(() { _allTrainLines = lines!; _isLoadingAll = false; });
+    if (mounted) setState(() { _allTrainLines = lines ?? [] ; _isLoadingAll = false; });
   }
 
   bool _isSaved(String lineName) => _savedTrains.any((t) => t.lineName == lineName);

@@ -28,15 +28,32 @@ class GtfsService {
 
     await feedDir.create(recursive: true);
     final archive = ZipDecoder().decodeBytes(response.bodyBytes);
+
     for (final file in archive) {
-      if (file.isFile) {
-        final outFile = File('${feedDir.path}/${file.name}');
+      if (!file.isFile) continue;
+
+      // Skip macOS metadata junk that isn't real GTFS data
+      if (file.name.startsWith('__MACOSX/') ||
+          file.name.split('/').last.startsWith('._')) {
+        continue;
+      }
+
+      final outFile = File('${feedDir.path}/${file.name}');
+
+      try {
+        // Handles any nested folder structure inside the zip
+        await outFile.parent.create(recursive: true);
         await outFile.writeAsBytes(file.content as List<int>);
+      } catch (e) {
+        // Don't let one bad entry kill extraction of the rest
+        log('Skipping bad zip entry "${file.name}": $e');
       }
     }
+
     log('GTFS feed for $category extracted to ${feedDir.path}');
     return feedDir;
   }
+
 
   Future<List<Map<String, dynamic>>> _readCsv(Directory feedDir, String filename) async {
     final cacheKey = '${feedDir.path}/$filename';
