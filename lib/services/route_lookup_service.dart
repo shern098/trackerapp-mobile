@@ -1,5 +1,6 @@
 import 'dart:developer';
 import 'dart:io';
+import 'dart:convert';
 import 'package:archive/archive.dart';
 import 'package:csv/csv.dart';
 import 'package:http/http.dart' as http;
@@ -29,7 +30,7 @@ class RouteLookupService {
         (f) => f.name == 'routes.txt',
         orElse: () => throw Exception('routes.txt not found in feed'),
       );
-      content = String.fromCharCodes(routesEntry.content as List<int>);
+      content = utf8.decode(routesEntry.content as List<int>);
       await routesFile.writeAsString(content); // cache to disk so we only ever download once
     }
     final rows = csv.decode(content);

@@ -19,7 +19,6 @@ import 'services/notification_service.dart';
 import 'services/theme_service.dart';
 import 'services/auth_service.dart';
 
-
 final ValueNotifier<UserModel?> currentUserNotifier = ValueNotifier(null);
 final ValueNotifier<ThemeMode> themeModeNotifier = ValueNotifier(ThemeMode.light);
 final RouteObserver<ModalRoute<void>> routeObserver = RouteObserver<ModalRoute<void>>();
@@ -73,7 +72,6 @@ class MyApp extends StatelessWidget {
               '/login': (context) => const LoginScreen(),
               '/register': (context) => const RegisterScreen(),
               '/account': (context) => const AccountScreen(),
-
             },
           );
         });

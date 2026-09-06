@@ -1,3 +1,5 @@
+import 'dart:developer';
+
 import 'package:http/http.dart' as http;
 import '../generated/gtfs-realtime.pb.dart';
 
@@ -17,10 +19,11 @@ class VehiclePositionInfo {
 
 class BusRealtimeService {
   static const _url =
-      'https://api.data.gov.my/gtfs-realtime/vehicle-position/prasarana?category=rapid-bus-kl';
+      'https://api.data.gov.my/gtfs-realtime/vehicle-position/prasarana?category=rapid-bus-mrtfeeder';
 
   Future<List<VehiclePositionInfo>> fetchVehiclePositions() async {
     final response = await http.get(Uri.parse(_url));
+    log('*** status: ${response.statusCode}, bytes: ${response.bodyBytes.length}');
 
     if (response.statusCode != 200) {
       throw Exception('Failed to load vehicle positions: ${response.statusCode}');

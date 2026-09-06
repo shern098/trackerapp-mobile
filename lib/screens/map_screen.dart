@@ -6,7 +6,7 @@ import 'package:flutter_map_location_marker/flutter_map_location_marker.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:location/location.dart';
 import 'package:permission_handler/permission_handler.dart' as handler;
-import '../main.dart' show currentUserNotifier;
+import '../main.dart' show currentUserNotifier, routeObserver;
 import '../widgets/app_drawer.dart';
 import '../services/bus_realtime_service.dart';
 import '../services/route_lookup_service.dart';
@@ -24,7 +24,7 @@ class MapScreen extends StatefulWidget {
   State<MapScreen> createState() => _MapScreenState();
 }
 
-class _MapScreenState extends State<MapScreen> {
+class _MapScreenState extends State<MapScreen> with RouteAware {
 
   final MapController _mapController = MapController();
   final Location _location = Location();
@@ -55,17 +55,20 @@ class _MapScreenState extends State<MapScreen> {
   String? _selectedVehicleLabel;
   String? _selectedVehicleEta;
 
-  List<VehiclePositionInfo> get _visibleBuses {
-    final visibleNumbers = _savedBuses
-        .where((b) => b.iconVisible == 1)
-        .map((b) => b.busNumber)
-        .toSet();
-    if (visibleNumbers.isEmpty) return [];
-    return _liveBuses.where((bus) {
-      final shortName = bus.routeId != null ? _routeIdToShortName[bus.routeId] : null;
-      return shortName != null && visibleNumbers.contains(shortName);
-    }).toList();
-  }
+  List<VehiclePositionInfo> get _visibleBuses => _liveBuses; //!!!show all in case dov data unavailable AGAIN ?!!!@#!@#!#!!!
+
+  // !!!show only in my list !!1
+  // List<VehiclePositionInfo> get _visibleBuses {
+  //   final visibleNumbers = _savedBuses
+  //       .where((b) => b.iconVisible == 1)
+  //       .map((b) => b.busNumber)
+  //       .toSet();
+  //   if (visibleNumbers.isEmpty) return [];
+  //   return _liveBuses.where((bus) {
+  //     final shortName = bus.routeId != null ? _routeIdToShortName[bus.routeId] : null;
+  //     return shortName != null && visibleNumbers.contains(shortName);
+  //   }).toList();
+  // }
 
   List<Polyline> get _visiblePolylines {
     final busPolylines = _savedBuses
@@ -92,10 +95,24 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    routeObserver.subscribe(this, ModalRoute.of(context)!);
+  }
+
+  @override
   void dispose() {
+    routeObserver.unsubscribe(this);
     _pollTimer?.cancel();
     _locationSub?.cancel();
     super.dispose();
+  }
+
+  @override
+  void didPopNext() {
+    // Called when the top route has been popped off, and the current route (Map) shows up.
+    debugPrint('>>> Returning to MapScreen: Refreshing data...');
+    _refreshAll();
   }
 
 
@@ -291,7 +308,15 @@ class _MapScreenState extends State<MapScreen> {
                 urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                 userAgentPackageName: 'com.example.trackerapp',
               ),
-
+              PolylineLayer(polylines: _visiblePolylines),
+              MarkerLayer(
+                markers: _visibleBuses.map((bus) => Marker(
+                  point: LatLng(bus.latitude, bus.longitude),
+                  width: 40,
+                  height: 40,
+                  child: const Icon(Icons.directions_bus, color: Colors.blue),
+                )).toList(),
+              ),
               if (_permissionGranted && _gpsEnabled) CurrentLocationLayer(),
             ],
           ),
