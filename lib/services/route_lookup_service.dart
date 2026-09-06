@@ -54,11 +54,28 @@ class RouteLookupService {
 
   Future<String?> shortNameForRouteId(String category, String routeId) async {
     final rows = await _ensureRowsLoaded(category);
+
     final match = rows.firstWhere(
-      (r) => r['route_id'].toString() == routeId,
+          (r) => r['route_id'].toString() == routeId,
       orElse: () => {},
     );
-    if (match.isEmpty) return null;
-    return match['route_short_name']?.toString();
+    if (match.isNotEmpty) {
+      final shortName = match['route_short_name']?.toString();
+      if (shortName != null && shortName.trim().isNotEmpty) return shortName;
+      final longName = match['route_long_name']?.toString();
+      if (longName != null && longName.trim().isNotEmpty) return longName;
+    }
+
+    final fallback = rows.firstWhere(
+          (r) =>
+      r['route_short_name'].toString() == routeId ||
+          r['route_long_name'].toString() == routeId,
+      orElse: () => {},
+    );
+    if (fallback.isEmpty) return null;
+
+    final shortName = fallback['route_short_name']?.toString();
+    if (shortName != null && shortName.trim().isNotEmpty) return shortName;
+    return fallback['route_long_name']?.toString();
   }
 }
