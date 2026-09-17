@@ -70,7 +70,6 @@ class RouteLayer extends StatelessWidget {
       i += arrowSpacing
       ) {
         final start = directionPoints[i];
-
         final end = directionPoints[i + 1];
 
         final bearing = _calculateBearing(

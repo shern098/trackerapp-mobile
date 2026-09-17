@@ -102,6 +102,7 @@
 import 'package:flutter/material.dart';
 
 import '../screens/bus_screen.dart';
+import '../screens/plan_route_screen.dart';
 import '../screens/train_screen.dart';
 
 class AppDrawer extends StatelessWidget {
@@ -172,8 +173,16 @@ class AppDrawer extends StatelessWidget {
                 Icons.route,
               ),
               title: const Text('Plan Journey'),
-              onTap: () {
+              onTap: () async {
                 Navigator.pop(context);
+
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) =>
+                    const RoutePlannerScreen(),
+                  ),
+                );
               },
             ),
 
