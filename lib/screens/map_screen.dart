@@ -11,7 +11,8 @@ import '../models/bus_stop.dart';
 
 import '../services/transport_api.dart';
 import '../services/gtfs_static_service.dart';
-import '../services/route_preferences_service.dart';
+import '../services/gtfs_supabase_service.dart';
+import '../services/tracked_routes_service.dart';
 
 import '../widgets/vehicle_marker.dart';
 import '../widgets/route_layer.dart';
@@ -19,8 +20,6 @@ import '../widgets/bus_stop_marker.dart';
 import '../widgets/bus_stop_popup.dart';
 import '../widgets/app_drawer.dart';
 import '../widgets/vehicle_popup.dart';
-
-import '../services/tracked_routes_service.dart';
 
 class MapScreen extends StatefulWidget {
   final String? routeId;
@@ -42,12 +41,16 @@ class _MapScreenState
   final TransportApi _transportApi =
   TransportApi();
 
-  final TrackedRoutesService _trackedRoutesService = TrackedRoutesService();
-
   final GtfsStaticService _gtfsService =
   GtfsStaticService(
     directory: 'assets/gtfs',
   );
+
+  final GtfsSupabaseService _gtfsSupabaseService =
+  GtfsSupabaseService();
+
+  final TrackedRoutesService _trackedRoutesService =
+  TrackedRoutesService();
 
   LatLng _center =
   const LatLng(
@@ -98,6 +101,11 @@ class _MapScreenState
   // running at the same time.
   bool _syncingRoutes = false;
 
+  // Bare route IDs (rapid-rail-kl feed) currently desired on the
+  // map. Lets _selectRoute know whether to fetch from Supabase
+  // (train) or the bundled local GTFS files (bus).
+  final Set<String> _trainRouteIds = {};
+
   // ============================================================
   // INITIALIZE
   // ============================================================
@@ -109,7 +117,10 @@ class _MapScreenState
     _mapController =
         MapController();
 
-    TrackedRoutesService.changes.addListener(_onRoutePreferencesChanged);
+    TrackedRoutesService.changes
+        .addListener(
+      _onRoutePreferencesChanged,
+    );
 
     _fetchRealtimeData();
 
@@ -160,6 +171,18 @@ class _MapScreenState
     return ids;
   }
 
+  List<String> _bareRapidRailRouteIds(List<String> keys) {
+    final ids = <String>[];
+    for (final key in keys) {
+      final parts = key.split('|');
+      if (parts.length == 2 &&
+          parts[0] == GtfsSupabaseService.trainFeedCategory) {
+        ids.add(parts[1]);
+      }
+    }
+    return ids;
+  }
+
 
   // ============================================================
   // SYNC CONFIGURED ROUTES
@@ -187,15 +210,31 @@ class _MapScreenState
     _syncingRoutes = true;
 
     try {
-      final busTracked = await _trackedRoutesService.getTrackedRoutes('bus');
-      final enabledBusRoutes = _bareRapidKlRouteIds(
-        busTracked.entries.where((e) => e.value).map((e) => e.key).toList(),
+      final busTracked =
+      await _trackedRoutesService.getTrackedRoutes('bus');
+
+      final enabledBusRoutes =
+      _bareRapidKlRouteIds(
+        busTracked.entries
+            .where((e) => e.value)
+            .map((e) => e.key)
+            .toList(),
       );
 
+      final trainTracked =
+      await _trackedRoutesService.getTrackedRoutes('train');
 
       final enabledTrainRoutes =
-      await RoutePreferencesService
-          .getEnabledTrainRoutes();
+      _bareRapidRailRouteIds(
+        trainTracked.entries
+            .where((e) => e.value)
+            .map((e) => e.key)
+            .toList(),
+      );
+
+      _trainRouteIds
+        ..clear()
+        ..addAll(enabledTrainRoutes);
 
       final desiredRouteIds =
       <String>{
@@ -376,12 +415,22 @@ class _MapScreenState
   // ============================================================
   // REALTIME VEHICLE DATA
   // ============================================================
+  //
+  // Bus only — there is no realtime feed for rapid-rail-kl
+  // (train), so this never fetches or polls for trains.
+  // ============================================================
 
   Future<void> _fetchRealtimeData() async {
     try {
-      final busTracked = await _trackedRoutesService.getTrackedRoutes('bus');
-      final enabledBusRoutes = _bareRapidKlRouteIds(
-        busTracked.entries.where((e) => e.value).map((e) => e.key).toList(),
+      final busTracked =
+      await _trackedRoutesService.getTrackedRoutes('bus');
+
+      final enabledBusRoutes =
+      _bareRapidKlRouteIds(
+        busTracked.entries
+            .where((e) => e.value)
+            .map((e) => e.key)
+            .toList(),
       );
 
       print('');
@@ -445,6 +494,11 @@ class _MapScreenState
   // ============================================================
   // LOAD ONE ROUTE
   // ============================================================
+  //
+  // Bus routes are read from the bundled local GTFS files.
+  // Train routes (rapid-rail-kl) have no local bundle, so they
+  // are read from Supabase instead.
+  // ============================================================
 
   Future<void> _selectRoute(
       String routeId, {
@@ -461,12 +515,21 @@ class _MapScreenState
       return;
     }
 
+    final bool isTrain =
+    _trainRouteIds.contains(routeId);
+
+    const trainFeed =
+        GtfsSupabaseService.trainFeedCategory;
+
     print('');
     print(
       '========== LOADING ROUTE ==========',
     );
     print(
       'Route ID: $routeId',
+    );
+    print(
+      'Mode: ${isTrain ? 'train' : 'bus'}',
     );
 
     if (!mounted) return;
@@ -489,8 +552,12 @@ class _MapScreenState
       // 1. Get route
       // --------------------------------------------------------
 
-      final route =
-      await _gtfsService.getRoute(
+      final route = isTrain
+          ? await _gtfsSupabaseService.getRouteByFeedAndId(
+        trainFeed,
+        routeId,
+      )
+          : await _gtfsService.getRoute(
         routeId,
       );
 
@@ -518,8 +585,12 @@ class _MapScreenState
       // 2. Get trips
       // --------------------------------------------------------
 
-      final trips =
-      await _gtfsService
+      final trips = isTrain
+          ? await _gtfsSupabaseService.getTripsForRoute(
+        trainFeed,
+        routeId,
+      )
+          : await _gtfsService
           .getTripsForRoute(
         routeId,
       );
@@ -598,8 +669,12 @@ class _MapScreenState
         // Shape
         // ------------------------------------------------------
 
-        final shape =
-        await _gtfsService
+        final shape = isTrain
+            ? await _gtfsSupabaseService.getShape(
+          trainFeed,
+          trip.shapeId,
+        )
+            : await _gtfsService
             .getShape(
           trip.shapeId,
         );
@@ -619,8 +694,12 @@ class _MapScreenState
         // Stops
         // ------------------------------------------------------
 
-        final stops =
-        await _gtfsService
+        final stops = isTrain
+            ? await _gtfsSupabaseService.getStopsForTrip(
+          trainFeed,
+          trip.tripId,
+        )
+            : await _gtfsService
             .getStopsForTrip(
           trip.tripId,
         );
@@ -645,14 +724,27 @@ class _MapScreenState
       // Check preferences before adding it to the map.
       // --------------------------------------------------------
 
-      final busTracked = await _trackedRoutesService.getTrackedRoutes('bus');
-      final enabledBusRoutes = _bareRapidKlRouteIds(
-        busTracked.entries.where((e) => e.value).map((e) => e.key).toList(),
+      final busTracked =
+      await _trackedRoutesService.getTrackedRoutes('bus');
+
+      final enabledBusRoutes =
+      _bareRapidKlRouteIds(
+        busTracked.entries
+            .where((e) => e.value)
+            .map((e) => e.key)
+            .toList(),
       );
 
+      final trainTracked =
+      await _trackedRoutesService.getTrackedRoutes('train');
+
       final enabledTrainRoutes =
-      await RoutePreferencesService
-          .getEnabledTrainRoutes();
+      _bareRapidRailRouteIds(
+        trainTracked.entries
+            .where((e) => e.value)
+            .map((e) => e.key)
+            .toList(),
+      );
 
       final stillEnabled =
           enabledBusRoutes.contains(
@@ -766,7 +858,10 @@ class _MapScreenState
 
   @override
   void dispose() {
-    TrackedRoutesService.changes.removeListener(_onRoutePreferencesChanged);
+    TrackedRoutesService.changes
+        .removeListener(
+      _onRoutePreferencesChanged,
+    );
 
     _timer?.cancel();
 
@@ -997,19 +1092,19 @@ class _MapScreenState
                       height: 40,
                       child: GestureDetector(
                         onTap: () {
-                      setState(() {
-                        _selectedVehicle = vehicle;
-                        _selectedBusStop = null;
-                      });
-                    },
+                          setState(() {
+                            _selectedVehicle = vehicle;
+                            _selectedBusStop = null;
+                          });
+                        },
                         child: VehicleMarker(
-                        vehicle: vehicle,
-                        color: RouteLayer.routeColors[
-                        _selectedRoutes.keys
-                            .toList()
-                            .indexOf(vehicle.routeId) %
-                        RouteLayer.routeColors.length
-                        ],
+                          vehicle: vehicle,
+                          color: RouteLayer.routeColors[
+                          _selectedRoutes.keys
+                              .toList()
+                              .indexOf(vehicle.routeId) %
+                              RouteLayer.routeColors.length
+                          ],
                         ),
                       ),
                     );
