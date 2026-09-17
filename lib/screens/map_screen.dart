@@ -20,6 +20,8 @@ import '../widgets/bus_stop_popup.dart';
 import '../widgets/app_drawer.dart';
 import '../widgets/vehicle_popup.dart';
 
+import '../services/tracked_routes_service.dart';
+
 class MapScreen extends StatefulWidget {
   final String? routeId;
 
@@ -39,6 +41,8 @@ class _MapScreenState
 
   final TransportApi _transportApi =
   TransportApi();
+
+  final TrackedRoutesService _trackedRoutesService = TrackedRoutesService();
 
   final GtfsStaticService _gtfsService =
   GtfsStaticService(
@@ -105,10 +109,7 @@ class _MapScreenState
     _mapController =
         MapController();
 
-    RoutePreferencesService.changes
-        .addListener(
-      _onRoutePreferencesChanged,
-    );
+    TrackedRoutesService.changes.addListener(_onRoutePreferencesChanged);
 
     _fetchRealtimeData();
 
@@ -143,6 +144,23 @@ class _MapScreenState
     _syncConfiguredRoutes();
   }
 
+  List<String> _bareRapidKlRouteIds(List<String> keys) {
+    final ids = <String>[];
+    for (final key in keys) {
+      final parts = key.split('|');
+      if (parts.length == 2) {
+        if (parts[0] == 'rapid-bus-kl') {
+          ids.add(parts[1]);
+        }
+      } else {
+        // Old format with no feed prefix — treat as RapidKL.
+        ids.add(key);
+      }
+    }
+    return ids;
+  }
+
+
   // ============================================================
   // SYNC CONFIGURED ROUTES
   // ============================================================
@@ -169,9 +187,11 @@ class _MapScreenState
     _syncingRoutes = true;
 
     try {
-      final enabledBusRoutes =
-      await RoutePreferencesService
-          .getEnabledBusRoutes();
+      final busTracked = await _trackedRoutesService.getTrackedRoutes('bus');
+      final enabledBusRoutes = _bareRapidKlRouteIds(
+        busTracked.entries.where((e) => e.value).map((e) => e.key).toList(),
+      );
+
 
       final enabledTrainRoutes =
       await RoutePreferencesService
@@ -359,9 +379,10 @@ class _MapScreenState
 
   Future<void> _fetchRealtimeData() async {
     try {
-      final enabledBusRoutes =
-      await RoutePreferencesService
-          .getEnabledBusRoutes();
+      final busTracked = await _trackedRoutesService.getTrackedRoutes('bus');
+      final enabledBusRoutes = _bareRapidKlRouteIds(
+        busTracked.entries.where((e) => e.value).map((e) => e.key).toList(),
+      );
 
       print('');
       print('========== REALTIME BUS DATA ==========');
@@ -624,9 +645,10 @@ class _MapScreenState
       // Check preferences before adding it to the map.
       // --------------------------------------------------------
 
-      final enabledBusRoutes =
-      await RoutePreferencesService
-          .getEnabledBusRoutes();
+      final busTracked = await _trackedRoutesService.getTrackedRoutes('bus');
+      final enabledBusRoutes = _bareRapidKlRouteIds(
+        busTracked.entries.where((e) => e.value).map((e) => e.key).toList(),
+      );
 
       final enabledTrainRoutes =
       await RoutePreferencesService
@@ -744,10 +766,7 @@ class _MapScreenState
 
   @override
   void dispose() {
-    RoutePreferencesService.changes
-        .removeListener(
-      _onRoutePreferencesChanged,
-    );
+    TrackedRoutesService.changes.removeListener(_onRoutePreferencesChanged);
 
     _timer?.cancel();
 
