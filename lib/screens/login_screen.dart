@@ -113,6 +113,59 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  // ---- Forgot password flow ----
+  Future<void> _forgotPassword() async {
+    final controller = TextEditingController(text: _emailController.text.trim());
+
+    final email = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Reset Password'),
+        content: TextField(
+          controller: controller,
+          keyboardType: TextInputType.emailAddress,
+          decoration: const InputDecoration(
+            labelText: 'Email',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, controller.text.trim()),
+            child: const Text('Send Reset Link'),
+          ),
+        ],
+      ),
+    );
+
+    if (email == null || email.isEmpty) return;
+
+    try {
+      await _supabase.auth.resetPasswordForEmail(
+        email,
+        // Must match a URL registered in Supabase Dashboard ->
+        // Authentication -> URL Configuration -> Redirect URLs,
+        // and a scheme your app listens for natively.
+        redirectTo: 'io.supabase.flutterquickstart://reset-callback/',
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Check your email for a reset link')),
+        );
+      }
+    } on AuthException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.message)),
+        );
+      }
+    }
+  }
+
   @override
   void dispose() {
     _debounce?.cancel();
@@ -193,7 +246,19 @@ class _LoginScreenState extends State<LoginScreen> {
                 border: OutlineInputBorder(),
               ),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 8),
+
+            // "Forgot Password?" only shown in log-in mode.
+            if (!_isSignUp)
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  onPressed: _forgotPassword,
+                  child: const Text('Forgot Password?'),
+                ),
+              ),
+
+            const SizedBox(height: 12),
             if (_errorMessage != null)
               Padding(
                 padding: const EdgeInsets.only(bottom: 12),
