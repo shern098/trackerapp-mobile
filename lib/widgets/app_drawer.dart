@@ -100,7 +100,7 @@
 // }
 
 import 'package:flutter/material.dart';
-
+import 'package:trackerapp/screens/account_screen.dart';
 import '../screens/bus_screen.dart';
 import '../screens/plan_route_screen.dart';
 import '../screens/train_screen.dart';
@@ -196,8 +196,16 @@ class AppDrawer extends StatelessWidget {
                 Icons.account_circle,
               ),
               title: const Text('Account'),
-              onTap: () {
+              onTap: () async {
                 Navigator.pop(context);
+
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) =>
+                    const AccountScreen(),
+                  ),
+                );
               },
             ),
 
